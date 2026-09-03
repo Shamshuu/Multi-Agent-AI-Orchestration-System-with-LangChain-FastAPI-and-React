@@ -28,7 +28,7 @@ A stateful, autonomous multi-agent AI system built to solve complex, multi-step 
                      3. Store Initial Run│            │ 6. Real-time Events
                                          ▼            │
                               ┌─────────────────────┐ │
-                              │ PostgreSQL DB (:5432)│ │
+                              │PostgreSQL DB (:5432)│ │
                               └─────────────────────┘ │
                                                       │
                                                       │
