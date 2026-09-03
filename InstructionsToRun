@@ -1,0 +1,255 @@
+================================================================================
+AUTONOMOUS MULTI-AGENT AI ORCHESTRATION SYSTEM
+================================================================================
+Comprehensive Step-by-Step Instructions & Command Manual (Scratch to End)
+
+TABLE OF CONTENTS
+1. Prerequisites & Initial Spin-Up
+2. Verify All 5 Services & Healthchecks
+3. Functionality 1: Interactive Web UI & Real-Time Visualization
+4. Functionality 2: Primary REST API Task Initiation
+5. Functionality 3: Real-Time WebSocket Streaming Trace
+6. Functionality 4: Distributed Tool Execution via Celery & Redis
+7. Functionality 5: Custom Schema-Enforced Tools & Error Resilience
+8. Functionality 6: PostgreSQL Persistence & Audit Trail Inspection
+9. Stopping and Restarting the System
+
+================================================================================
+1. PREREQUISITES & INITIAL SPIN-UP
+================================================================================
+
+Step 1: Navigate to the Repository
+$ cd /home/shamshu/GPP/Week32/Multi-Agent-AI-Orchestration-System-with-LangChain-FastAPI-and-React
+
+Step 2: Configure Environment Variables
+Verify .env is present with your Groq API key:
+--------------------------------------------------------------------------------
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=openai/gpt-oss-120b
+
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/multiagent_db
+SYNC_DATABASE_URL=postgresql://postgres:postgres@db:5432/multiagent_db
+REDIS_URL=redis://redis:6379/0
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/0
+--------------------------------------------------------------------------------
+
+Step 3: Build and Start All Containers
+Launch all 5 containers in the background:
+$ docker compose up -d --build
+
+
+================================================================================
+2. VERIFY ALL 5 SERVICES & HEALTHCHECKS
+================================================================================
+
+Run:
+$ docker compose ps
+
+Expected Output:
+NAME             SERVICE   STATUS                    PORTS
+agent_api        api       Up                        0.0.0.0:8000->8000/tcp
+agent_postgres   db        Up (healthy)              0.0.0.0:5433->5432/tcp
+agent_redis      redis     Up (healthy)              0.0.0.0:6380->6379/tcp
+agent_ui         ui        Up                        0.0.0.0:3000->3000/tcp
+agent_worker     worker    Up                        8000/tcp
+
+Check API health endpoint:
+$ curl -s http://localhost:8000/api/health
+
+Expected Output:
+{"status":"healthy","llm_provider":"auto","has_groq_key":true,"has_openai_key":false}
+
+
+================================================================================
+3. FUNCTIONALITY 1: INTERACTIVE WEB UI & REAL-TIME VISUALIZATION
+================================================================================
+
+Open your browser to: http://localhost:3000
+
+What to Test on the UI:
+1. Header:
+   Verify the AgentMesh logo, connection indicator ("Live Stream" in green),
+   and the "Groq Powered" badge.
+
+2. Template Pills:
+   Click any of the pre-built template buttons below the input area:
+   - 🌤️ Tokyo Weather & Packing
+   - 📈 Financial CAGR & Growth
+   - 🤖 AI Multi-Agent State Research
+
+3. Launch Workflow:
+   Click "Launch Multi-Agent Workflow":
+   - LangGraph State Visualizer:
+     Watch the active node pulse with glowing animations as execution progresses:
+       * Node 01: Strategic Planner (deconstructing steps)
+       * Node 02: Researcher & Tools (calling tools via Celery/Redis queue)
+       * Node 03: Executive Synthesizer (collating findings)
+   - Real-Time Audit Timeline:
+     Watch events stream in live without page refreshes.
+   - Timeline Filtering:
+     Click the filter buttons (ALL, PLANNER, RESEARCHER, TOOLS, SYNTHESIZER)
+     to view specific stages.
+   - Raw Audit Inspection:
+     Click "View Audit Payload" on any card to inspect the exact parameters passed
+     to Celery tools or recorded in PostgreSQL.
+   - Executive Deliverable Card:
+     View the synthesized Markdown report. Click "Copy" or "Download .md" to export it.
+
+4. PostgreSQL Audit Log Modal:
+   Click "Audit Log" in the top navbar. You will see all historical task runs.
+   Click on any past task to reload its events and result.
+
+
+================================================================================
+4. FUNCTIONALITY 2: PRIMARY REST API TASK INITIATION
+================================================================================
+
+Submit a task via standard HTTP POST:
+$ curl -X POST http://localhost:8000/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Calculate 50000 * ((1 + 0.08)**5) and check current weather in Tokyo, Japan for travel."}'
+
+Expected Response:
+Returns immediately (HTTP 202 Accepted) with a unique UUID task_id while the
+agent workflow runs asynchronously in the background:
+{
+  "task_id": "0a26f7c3-20a1-4a69-a6e5-3a3b6c8656d0",
+  "status": "PENDING",
+  "prompt": "Calculate 50000 * ((1 + 0.08)**5)...",
+  "message": "Task accepted. Connect to WebSocket /api/ws/{task_id} for live trace."
+}
+
+Check status and final synthesized deliverable using the returned task_id:
+$ curl -s http://localhost:8000/api/tasks/<REPLACE_WITH_TASK_ID>
+
+
+================================================================================
+5. FUNCTIONALITY 3: REAL-TIME WEBSOCKET STREAMING TRACE
+================================================================================
+
+Verify bidirectional WebSocket streaming from the command line:
+$ docker compose exec api python3 -c "
+import asyncio, json, websockets, httpx
+
+async def stream_test():
+    # 1. Post a task
+    async with httpx.AsyncClient() as client:
+        resp = await client.post('http://localhost:8000/api/tasks', json={
+            'prompt': 'Plan and search weather in Paris, France and calculate 25 * 4'
+        })
+        task_id = resp.json()['task_id']
+        print(f'Created Task: {task_id}')
+
+    # 2. Connect to WebSocket stream
+    uri = f'ws://localhost:8000/api/ws/{task_id}'
+    print(f'Listening on WebSocket: {uri}\n')
+    async with websockets.connect(uri) as ws:
+        while True:
+            try:
+                msg = await asyncio.wait_for(ws.recv(), timeout=12.0)
+                event = json.loads(msg)
+                agent = event.get('agent', 'System')
+                etype = event.get('event_type')
+                print(f'  [EVENT] Agent={agent:<12} Type={etype}')
+                if etype == 'COMPLETE':
+                    print('\n>>> Workflow Completed Successfully! <<<')
+                    break
+            except asyncio.TimeoutError:
+                break
+
+asyncio.run(stream_test())
+"
+
+Expected Output:
+Created Task: <uuid>
+Listening on WebSocket: ws://localhost:8000/api/ws/<uuid>
+
+  [EVENT] Agent=Planner      Type=AGENT_THOUGHT
+  [EVENT] Agent=Planner      Type=STATE_TRANSITION
+  [EVENT] Agent=Researcher   Type=AGENT_THOUGHT
+  [EVENT] Agent=Researcher   Type=TOOL_INVOCATION
+  [EVENT] Agent=Researcher   Type=TOOL_RESULT
+  [EVENT] Agent=Synthesizer  Type=AGENT_THOUGHT
+  [EVENT] Agent=Synthesizer  Type=COMPLETE
+
+>>> Workflow Completed Successfully! <<<
+
+
+================================================================================
+6. FUNCTIONALITY 4: DISTRIBUTED TOOL EXECUTION VIA CELERY & REDIS
+================================================================================
+
+To watch the Celery worker consuming tool tasks from the Redis queue:
+
+In a terminal, stream worker logs:
+$ docker compose logs worker -f
+
+Trigger any task from the UI or via cURL. You will observe:
+[INFO/MainProcess] Task execute_tool_task[<uuid>] received
+[INFO/ForkPoolWorker-2] Celery executing tool 'weather_search' with args {'location': 'Tokyo, Japan', 'units': 'metric'}
+[INFO/ForkPoolWorker-2] Task execute_tool_task[<uuid>] succeeded in 0.42s: {'status': 'success', 'result': '...'}
+
+
+================================================================================
+7. FUNCTIONALITY 5: CUSTOM SCHEMA-ENFORCED TOOLS & ERROR RESILIENCE
+================================================================================
+
+Directly test each tool and its error-handling mechanisms inside the backend runtime:
+
+$ docker compose exec api python3 -c "
+from app.tools.implementations import execute_weather_search, execute_calculator, execute_web_search
+
+print('=== 1. Weather Search Tool (Open-Meteo Live API) ===')
+print(execute_weather_search('Tokyo, Japan', 'metric'))
+
+print('\n=== 2. Calculator Tool (Safe AST Evaluator) ===')
+print(execute_calculator('50000 * (1 + 0.08)**5', '5-year compounding'))
+
+print('\n=== 3. Calculator Tool (Graceful Error Handling) ===')
+print(execute_calculator('100 / 0'))
+
+print('\n=== 4. Weather Search (Invalid Location Handling) ===')
+print(execute_weather_search('NonExistentCityXYZ123'))
+"
+
+Expected Output:
+- Live temperature and 3-day forecast for Tokyo.
+- Compound interest result (73466.40...).
+- Math Error: Division by zero encountered in expression '100 / 0'.
+- Geocoding error: Location 'NonExistentCityXYZ123' not found.
+(Errors are returned as informative strings to the agent rather than crashing Python).
+
+
+================================================================================
+8. FUNCTIONALITY 6: POSTGRESQL PERSISTENCE & AUDIT TRAIL INSPECTION
+================================================================================
+
+Inspect audit records directly inside PostgreSQL:
+
+View Recent Task Runs:
+$ docker compose exec db psql -U postgres -d multiagent_db -c \
+  "SELECT id, status, prompt, created_at FROM task_runs ORDER BY created_at DESC LIMIT 5;"
+
+View Granular Audit Events (Thoughts, Tool Calls, Payloads):
+$ docker compose exec db psql -U postgres -d multiagent_db -c \
+  "SELECT agent_name, event_type, timestamp FROM agent_events ORDER BY timestamp DESC LIMIT 10;"
+
+View Audit Events via REST API:
+$ curl -s http://localhost:8000/api/tasks/<REPLACE_WITH_TASK_ID>/events | jq .
+
+
+================================================================================
+9. STOPPING AND RESTARTING THE SYSTEM
+================================================================================
+
+Stop all services (preserving database and cache data):
+$ docker compose down
+
+Restart services:
+$ docker compose up -d
+
+Wipe and reinitialize everything from scratch (clean database and Redis volumes):
+$ docker compose down -v
+$ docker compose up -d --build
+================================================================================
