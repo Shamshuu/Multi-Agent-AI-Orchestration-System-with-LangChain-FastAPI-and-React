@@ -1,4 +1,3 @@
-================================================================================
 AUTONOMOUS MULTI-AGENT AI ORCHESTRATION SYSTEM
 ================================================================================
 Comprehensive Architecture, Purpose, Functional Implementation, and Technology Breakdown
